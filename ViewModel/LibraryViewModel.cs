@@ -63,8 +63,12 @@ namespace LibraryWPF.ViewModel
                         if (data.Length != 6)
                             throw new Exception($"Incorrect line format for parsing.\n\nLine: {line}");
 
-                        if (!data[0].All(Char.IsLetter) || !data[1].All(Char.IsLetter) || !data[2].All(Char.IsLetter))
+                        if (!data[0].All(Char.IsLetter) || !data[1].All(Char.IsLetter) || !data[2].All(Char.IsLetter) ||
+                            string.IsNullOrEmpty(data[0]) || string.IsNullOrEmpty(data[1]) || string.IsNullOrEmpty(data[2]))
                             throw new Exception($"Incorrect string format for parsing first name, last name or surname.\n\nLine: {line}");
+
+                        if (string.IsNullOrEmpty(data[4]))
+                            throw new Exception($"Book name can't be empty.\n\nLine: {line}");
 
                         int bookYear;
 
