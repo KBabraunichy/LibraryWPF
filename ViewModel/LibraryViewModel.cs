@@ -1,7 +1,7 @@
-﻿using Aspose.Cells;
-using LibraryWPF.Commands;
+﻿using LibraryWPF.Commands;
 using LibraryWPF.Models;
 using LibraryWPF.Repositories;
+using LibraryWPF.Utils;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -10,7 +10,9 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Xml.Linq;
 
@@ -21,16 +23,13 @@ namespace LibraryWPF.ViewModel
     {
         private readonly LibraryRepository _libraryRepository;
 
-        public ObservableCollection<LibraryModel> LibraryCollection { get; set; }
-
         public LibraryViewModel()
         {
             _libraryRepository = new LibraryRepository();
-            
+
         }
 
-
-        //open file
+        //--------------------------open file
 
         public IEnumerable<LibraryModel> loadedList;
         public IEnumerable<LibraryModel> LoadedList
@@ -60,7 +59,19 @@ namespace LibraryWPF.ViewModel
                     LoadedList = lines.Select(line =>
                     {
                         string[] data = line.Split(';');
-                        // We return a person with the data in order.
+
+                        if (data.Length != 6)
+                            throw new Exception($"Incorrect line format for parsing.\n\nLine: {line}");
+
+                        if (!data[0].All(Char.IsLetter) || !data[1].All(Char.IsLetter) || !data[2].All(Char.IsLetter))
+                            throw new Exception($"Incorrect string format for parsing first name, last name or surname.\n\nLine: {line}");
+
+                        int bookYear;
+
+                        if (!int.TryParse(data[5], out bookYear) || bookYear > DateTime.Now.Date.Year || bookYear < 1)
+                            throw new Exception($"Incorrect book year.\n\nLine: {line}");
+
+
                         return new LibraryModel()
                         {
                             AuthorFirstName = data[0],
@@ -73,18 +84,20 @@ namespace LibraryWPF.ViewModel
                         
 
                     });
-                    //return;
+
                 }
             }
             catch (Exception e)
             {
                 MessageBox.Show(e.Message);
+                //clear list if error appeared
+                LoadedList = null;
             }
 
 
         }
 
-        //import data
+        //--------------------------import data
 
         public ICommand ImportCommand => new RelayCommand(ImportFile, (obj) => loadedList != null);
 
@@ -99,7 +112,7 @@ namespace LibraryWPF.ViewModel
                 
                 _libraryRepository.Save();
 
-                MessageBox.Show("Data has been loaded.");
+                MessageBox.Show("Data has been imported.");
             }
             catch (Exception e)
             {
@@ -107,13 +120,102 @@ namespace LibraryWPF.ViewModel
             }
         }
 
+        //--------------------------filter for export data
 
-        // export data
+        public ObservableCollection<LibraryModel> _libraryCollection;
+        
+        public ICommand LoadFromDBCommand => new RelayCommand(LoadOrRefreshData);
+
+        private void LoadOrRefreshData(object commandParameter)
+        {
+            _libraryCollection = _libraryRepository.GetObjectCollection();
+            LibraryCollectionView = CollectionViewSource.GetDefaultView(LibraryCollection);
+
+            LibraryFilter libFilter = new LibraryFilter();
+            libFilter.AddFilter(
+                libModel => libModel.AuthorFirstName.Contains(AuthorFirstNameFilter));
+
+            libFilter.AddFilter(
+                libModel => libModel.AuthorLastName.Contains(AuthorLastNameFilter));
+
+            libFilter.AddFilter(
+                libModel => libModel.AuthorSurName.Contains(AuthorSurNameFilter));
+            
+            libFilter.AddFilter(
+                libModel => string.IsNullOrEmpty(BookYearFilter) || libModel.BookYear.ToString().Equals(BookYearFilter));
+
+            LibraryCollectionView.Filter = libFilter.Filter;
+            OnPropertyChanged("LibraryCollectionView");
+
+            MessageBox.Show("Data has been loaded.");
+        }
+
+
+        public ObservableCollection<LibraryModel> LibraryCollection
+        {
+            get { return _libraryCollection; }
+            set { _libraryCollection = value; }
+        }
+
+        private ICollectionView _libraryCollectionView;
+
+        public ICollectionView LibraryCollectionView
+        {
+            get { return _libraryCollectionView; }
+            set { _libraryCollectionView = value; }
+        }
+
+        private string _authorFirstNameFilter = string.Empty;
+        public string AuthorFirstNameFilter
+        {
+            get { return _authorFirstNameFilter; }
+            set
+            {
+                _authorFirstNameFilter = value;
+                LibraryCollectionView?.Refresh();
+            }
+        }
+
+        private string _authorLastNameFilter = string.Empty;
+        public string AuthorLastNameFilter
+        {
+            get { return _authorLastNameFilter; }
+            set
+            {
+                _authorLastNameFilter = value;
+                LibraryCollectionView?.Refresh();
+            }
+        }
+
+        private string _authorSurNameFilter = string.Empty;
+        public string AuthorSurNameFilter
+        {
+            get { return _authorSurNameFilter; }
+            set
+            {
+                _authorSurNameFilter = value;
+                LibraryCollectionView?.Refresh();
+            }
+        }
+
+        private string _bookYearFilter = string.Empty;
+        public string BookYearFilter
+        {
+            get { return _bookYearFilter; }
+            set
+            {
+                _bookYearFilter = value;
+                LibraryCollectionView?.Refresh();
+            }
+        }
+
+        //--------------------------export data
 
         public string XmlFormat { get; set; } = ".xml";
-        public string XlsxFormat { get; set; } = ".xlsx";
+        public string CsvFormat { get; set; } = ".csv";
 
-        public ICommand ExportCommand => new RelayCommand(ExportDataFromDB);
+        public ICommand ExportCommand => new RelayCommand(ExportDataFromDB, (obj) => LibraryCollectionView != null);
+
 
         public void ExportDataFromDB(object commandParameter)
         {
@@ -121,48 +223,31 @@ namespace LibraryWPF.ViewModel
             {
                 
                 string extension = commandParameter.ToString();
-                LibraryCollection = _libraryRepository.GetObjectCollection();
+
                 SaveFileDialog saveFileDialog = new SaveFileDialog();
 
-                saveFileDialog.Filter = (extension == ".xlsx") ? "Excel files (*.xlsx)|*.xlsx" : "XML files (*.xml)|*.xml";
+                saveFileDialog.Filter = (extension == ".csv") ? "Excel files (*.csv)|*.csv" : "XML files (*.xml)|*.xml";
 
 
                 if (saveFileDialog.ShowDialog() == true)
                 {
-                    if (extension == ".xlsx")
+                    string libraryData = "";
+
+                    if (extension == ".csv")
                     {
-                        Workbook wb = new Workbook();
-                        Worksheet sheet = wb.Worksheets[0];
 
-                        string cellChars = "ABCDEF";
-                        string[] libColumns = new[] { "FirstName", "LastName", "SurName", "Birthdate", "BookName", "BookYear" };
-                        
-                        for (int i=0; i<cellChars.Length;i++)
+                        foreach (LibraryModel obj in LibraryCollectionView)
                         {
-                            sheet.Cells[cellChars[i] + "1"].PutValue(libColumns[i]);
+                            libraryData += obj.ToString();
+                            libraryData += '\n';
                         }
 
-                        int intIndex = 2;
-                        
-                        foreach(LibraryModel obj in LibraryCollection)
-                        {
-                            sheet.Cells[cellChars[0] + intIndex.ToString()].PutValue(obj.AuthorFirstName);
-                            sheet.Cells[cellChars[1] + intIndex.ToString()].PutValue(obj.AuthorLastName);
-                            sheet.Cells[cellChars[2] + intIndex.ToString()].PutValue(obj.AuthorSurName);
-                            sheet.Cells[cellChars[3] + intIndex.ToString()].PutValue(obj.AuthorBirthDate);
-                            sheet.Cells[cellChars[4] + intIndex.ToString()].PutValue(obj.BookName);
-                            sheet.Cells[cellChars[5] + intIndex.ToString()].PutValue(obj.BookYear);
-
-                            intIndex++;
-                        }
-
-                        wb.Save(saveFileDialog.FileName, SaveFormat.Xlsx);
                     }
                     else
                     {
-                        string libraryData = new XElement(
+                        libraryData = new XElement(
                             "Library",
-                            from obj in LibraryCollection
+                            from obj in LibraryCollectionView.Cast<LibraryModel>().ToList()
                             select new XElement("Record",
                                    new XAttribute("id", obj.Id),
                                    new XElement("FirstName", obj.AuthorFirstName),
@@ -173,8 +258,10 @@ namespace LibraryWPF.ViewModel
                                    new XElement("BookYear", obj.BookYear)
                         )).ToString();
 
-                        File.WriteAllText(saveFileDialog.FileName, libraryData);
+                        
                     }
+
+                    File.WriteAllText(saveFileDialog.FileName, libraryData, Encoding.UTF8);
 
                     MessageBox.Show($"Data uploaded to a file: {saveFileDialog.FileName}");
                 }

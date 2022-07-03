@@ -1,9 +1,5 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace LibraryWPF.Models
 {
@@ -20,5 +16,12 @@ namespace LibraryWPF.Models
 
         public int BookYear { get; set; }
 
+        public override string ToString()
+        {
+            return (AuthorFirstName + ';' + AuthorLastName + ';' + AuthorSurName + ';' + AuthorBirthDate + ';' + BookName + ';' + BookYear);
+        }
+
     }
+
+
 }
