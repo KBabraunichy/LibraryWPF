@@ -432,11 +432,12 @@ namespace LibraryWPF.ViewModel
                     }
                     else
                     {
+                        int id = 1;
                         libraryData = new XElement(
                             "Library",
                             from obj in LibraryCollectionView.Cast<LibraryModel>().ToList()
                             select new XElement("Record",
-                                   new XAttribute("id", obj.AuthorLib.Id),
+                                   new XAttribute("id", id++),
                                    new XElement("FirstName", obj.AuthorLib.AuthorFirstName),
                                    new XElement("LastName", obj.AuthorLib.AuthorLastName),
                                    new XElement("SurName", obj.AuthorLib.AuthorSurName),
