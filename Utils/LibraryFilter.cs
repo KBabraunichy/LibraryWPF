@@ -15,6 +15,7 @@ namespace LibraryWPF.Utils
             _filters = new List<Predicate<LibraryModel>>();
             Filter = InternalFilter;
         }
+
         private bool InternalFilter(object obj)
         {
             if(_filters.Count == 0)

@@ -3,28 +3,28 @@ using System.Collections.ObjectModel;
 
 namespace LibraryWPF.Repositories
 {
-    public class LibraryRepository : IRepository<LibraryModel>
+    public class AuthorRepository : IRepository<Author>
     {
         private LibraryContext db;
 
-        public LibraryRepository()
+        public AuthorRepository()
         {
             db = new LibraryContext();
         }
 
-        public ObservableCollection<LibraryModel> GetObjectCollection()
+        public ObservableCollection<Author> GetObjectCollection()
         {
-            return new ObservableCollection<LibraryModel>(db.Library);
+            return new ObservableCollection<Author>(db.Authors);
         }
 
-        public LibraryModel GetObject(int id)
+        public Author GetObject(int id)
         {
-            return db.Library.Find(id);
+            return db.Authors.Find(id);
         }
 
-        public void Insert(LibraryModel obj)
+        public void Insert(Author obj)
         {
-            db.Library.Add(obj);
+            db.Authors.Add(obj);
         }
 
         public void Save()

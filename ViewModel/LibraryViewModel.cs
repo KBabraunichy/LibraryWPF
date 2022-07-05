@@ -21,32 +21,69 @@ namespace LibraryWPF.ViewModel
 {
     public class LibraryViewModel : INotifyPropertyChanged
     {
-        private readonly LibraryRepository _libraryRepository;
+        private readonly AuthorRepository _authorRepository;
+        private readonly BookRepository _bookRepository;
 
         public LibraryViewModel()
         {
-            _libraryRepository = new LibraryRepository();
+            _authorRepository = new AuthorRepository();
+            _bookRepository = new BookRepository();
 
         }
 
-        //--------------------------open file
-
-        public IEnumerable<LibraryModel> loadedList;
-        public IEnumerable<LibraryModel> LoadedList
+        public ObservableCollection<LibraryModel> GetLibraryCollection() 
         {
-            get { return loadedList; } 
+            var authorCollection = _authorRepository.GetObjectCollection();
+            var bookCollection = _bookRepository.GetObjectCollection();
+
+            return  new ObservableCollection<LibraryModel>(
+                        from authors in authorCollection
+                        join books in bookCollection on authors.Id equals books.AuthorId
+                        select new LibraryModel
+                        {
+                            AuthorLib = new Author
+                            {
+                                Id = authors.Id,
+                                AuthorFirstName = authors.AuthorFirstName,
+                                AuthorLastName = authors.AuthorLastName,
+                                AuthorSurName = authors.AuthorSurName,
+                                AuthorBirthDate = authors.AuthorBirthDate
+                            },
+                            BookLib = new Book
+                            {
+                                BookName = books.BookName,
+                                BookYear = books.BookYear,
+                                AuthorId = authors.Id
+                            }
+                        }
+                    );
             
-            set
-            {
-                loadedList = value;
-                OnPropertyChanged();
-            }
+        }
+
+
+        //--------------------------open file/import data
+
+        private ObservableCollection<LibraryModel> _loadedCollection;
+        public ObservableCollection<LibraryModel> LoadedCollection
+        {
+            get { return _loadedCollection; }
+            set { _loadedCollection = value; }
+        }
+
+        private ICollectionView _loadedCollectionView;
+
+        public ICollectionView LoadedCollectionView
+        {
+            get { return _loadedCollectionView; }
+            set { _loadedCollectionView = value; }
         }
         
         public ICommand LoadCommand => new RelayCommand(ReadFile);
 
         private void ReadFile(object commandParameter)
         {
+            LoadedCollection = new ObservableCollection<LibraryModel>();
+
             OpenFileDialog openFileDialog = new OpenFileDialog();
             openFileDialog.Filter = "CSV files (*.csv)|*.csv";
 
@@ -54,107 +91,188 @@ namespace LibraryWPF.ViewModel
             {
                 if (openFileDialog.ShowDialog() == true)
                 {
-                    string[] lines = File.ReadAllLines(openFileDialog.FileName);
+                    List<Tuple<string, string>> listErrors = new List<Tuple<string, string>>();
 
-                    LoadedList = lines.Select(line =>
+                    List<string> uniqueLines = new List<string>();
+
+                    //remove duplicates in file
+                    using (StreamReader streamReader = File.OpenText(openFileDialog.FileName))
                     {
-                        string[] data = line.Split(';');
+                        string line;
+                        while ((line = streamReader.ReadLine()) != null)
+                            if (!uniqueLines.Contains(line))
+                                uniqueLines.Add(line);
+                    }
 
-                        if (data.Length != 6)
-                            throw new Exception($"Incorrect line format for parsing.\n\nLine: {line}");
-
-                        if (!data[0].All(Char.IsLetter) || !data[1].All(Char.IsLetter) || !data[2].All(Char.IsLetter) ||
-                            string.IsNullOrEmpty(data[0]) || string.IsNullOrEmpty(data[1]) || string.IsNullOrEmpty(data[2]))
-                            throw new Exception($"Incorrect string format for parsing first name, last name or surname.\n\nLine: {line}");
-
-                        if (string.IsNullOrEmpty(data[4]))
-                            throw new Exception($"Book name can't be empty.\n\nLine: {line}");
-
-                        int bookYear;
-
-                        if (!int.TryParse(data[5], out bookYear) || bookYear > DateTime.Now.Date.Year || bookYear < 1)
-                            throw new Exception($"Incorrect book year.\n\nLine: {line}");
-
-
-                        return new LibraryModel()
+                    var libColection = GetLibraryCollection();
+                    foreach (string line in uniqueLines)
+                    {
+                        try
                         {
-                            AuthorFirstName = data[0],
-                            AuthorLastName = data[1],
-                            AuthorSurName = data[2],
-                            AuthorBirthDate = DateTime.Parse(data[3]).Date,
-                            BookName = data[4],
-                            BookYear = int.Parse(data[5])
-                        };
-                        
+                            string[] data = line.Split(';');
 
-                    });
+                            DateTime authorBirthDate = DateTime.Parse(data[3]).Date;
 
+                            if (data.Length != 6)
+                            {
+                                listErrors.Add(new Tuple<string, string>(line, "Incorrect line format for parsing."));
+                                continue;
+                            }
+
+                            if (!data[0].All(Char.IsLetter) || !data[1].All(Char.IsLetter) || !data[2].All(Char.IsLetter) ||
+                                string.IsNullOrEmpty(data[0]) || string.IsNullOrEmpty(data[1]))
+                            {
+                                listErrors.Add(new Tuple<string, string>(line, "Incorrect string format for parsing first name, last name or surname."));
+                                continue;
+                            }
+
+                            if (string.IsNullOrEmpty(data[4]))
+                            {
+                                listErrors.Add(new Tuple<string, string>(line, "Book name can't be empty."));
+                                continue;
+                            }
+
+                            int bookYear = 0;
+                            if (!string.IsNullOrEmpty(data[5]))
+                            {
+                                if (!int.TryParse(data[5], out bookYear) || bookYear > DateTime.Now.Date.Year || bookYear < 1)
+                                {
+                                    listErrors.Add(new Tuple<string, string>(line, "Incorrect book year."));
+                                    continue;
+                                }
+                            }
+
+                            var checkAuthorInDB = libColection.Where(a => a.AuthorLib.AuthorFirstName == data[0].Trim() && a.AuthorLib.AuthorLastName == data[1].Trim() &&
+                                                                          a.AuthorLib.AuthorSurName == data[2].Trim() && a.AuthorLib.AuthorBirthDate == authorBirthDate)
+                                                              .Select(aid => aid.AuthorLib.Id)
+                                                              .FirstOrDefault();
+
+                            if (checkAuthorInDB == 0)
+                            {
+                                Author newAuthor = new Author
+                                {
+                                    AuthorFirstName = data[0].Trim(),
+                                    AuthorLastName = data[1].Trim(),
+                                    AuthorSurName = data[2].Trim(),
+                                    AuthorBirthDate = authorBirthDate,
+                                };
+
+                                Book newBook = new Book
+                                {
+                                    BookName = data[4],
+                                    BookYear = bookYear,
+                                    Author = newAuthor
+                                };
+
+                                _authorRepository.Insert(newAuthor);
+                                _bookRepository.Insert(newBook);
+
+                                LoadedCollection.Add(new LibraryModel
+                                {
+                                    AuthorLib = newAuthor,
+                                    BookLib = newBook
+                                });
+                            }
+                            else
+                            {
+                                var checkBookInDB = libColection.Where(b => b.BookLib.BookName == data[4] &&
+                                                                       b.BookLib.BookYear == bookYear &&
+                                                                       b.BookLib.AuthorId == checkAuthorInDB);
+
+                                if (!checkBookInDB.Any())
+                                {
+                                    Book newBook = new Book
+                                    {
+                                        BookName = data[4],
+                                        BookYear = bookYear,
+                                        AuthorId = checkAuthorInDB
+                                    };
+
+                                    _bookRepository.Insert(newBook);
+
+                                    LoadedCollection.Add(new LibraryModel
+                                    {
+                                        AuthorLib = libColection.Where(a => a.AuthorLib.Id == checkAuthorInDB)
+                                                                .Select(a => a.AuthorLib)
+                                                                .First(),
+                                        BookLib = newBook
+                                    });
+                                }
+                                else
+                                {
+                                    continue;
+                                }
+                            }
+
+                        }
+                        catch (Exception e)
+                        {
+                            listErrors.Add(new Tuple<string, string>(line, e.Message));
+                        }
+                    }
+
+                    _bookRepository.Save();
+
+                    if (listErrors.Count == 0 && LoadedCollection.Count == 0)
+                    {
+                        MessageBox.Show("There are no lines in the file or the provided data from the file is already in the Library.");
+                    }
+                    else if(listErrors.Count > 0)
+                    {
+                        FailedRowsFromFile(listErrors);
+                    }    
+                    else
+                    {
+                        MessageBox.Show("Data has been uploaded to Library.");
+                    }
+
+                    LoadedCollectionView = CollectionViewSource.GetDefaultView(LoadedCollection);
+                    OnPropertyChanged("LoadedCollectionView");
                 }
             }
             catch (Exception e)
             {
                 MessageBox.Show(e.Message);
-                //clear list if error appeared
-                LoadedList = null;
+                MessageBox.Show(e.InnerException?.Message);
             }
-
-
         }
 
-        //--------------------------import data
-
-        public ICommand ImportCommand => new RelayCommand(ImportFile, (obj) => loadedList != null);
-
-        public void ImportFile(object commandParameter)
+        private void FailedRowsFromFile(List<Tuple<string, string>> listErrors)
         {
-            try
-            {
-                foreach (LibraryModel obj in loadedList)
-                {
-                    _libraryRepository.Insert(obj);
-                }
-                
-                _libraryRepository.Save();
+            string badRowsCsv = string.Empty;
+            string badRowsInfo = string.Empty;
 
-                MessageBox.Show("Data has been imported.");
-            }
-            catch (Exception e)
+            SaveFileDialog saveFileDialog = new SaveFileDialog();
+            saveFileDialog.Filter = "Excel files (*.csv)|*.csv";
+
+            int i = 1;
+
+            badRowsInfo += "There are lines with errors in file. You can save these lines to file after closing this window.\n\n";
+            
+            foreach (var tuple in listErrors)
             {
-                MessageBox.Show(e.InnerException.Message);
+                badRowsCsv += tuple.Item1 + "\n";
+                
+                badRowsInfo += $"Line {i}:\n" + tuple.Item1 + "\nError: " + tuple.Item2 + "\n";
+                
+                i++;
+            }
+
+            MessageBox.Show(badRowsInfo);
+
+            if (saveFileDialog.ShowDialog() == true)
+            {
+                using FileStream fs = new FileStream(saveFileDialog.FileName, FileMode.Create);
+                using StreamWriter writer = new StreamWriter(fs, Encoding.UTF8);
+                writer.Write(badRowsCsv);
             }
         }
+
 
         //--------------------------filter for export data
 
-        public ObservableCollection<LibraryModel> _libraryCollection;
+        private ObservableCollection<LibraryModel> _libraryCollection;
         
-        public ICommand LoadFromDBCommand => new RelayCommand(LoadOrRefreshData);
-
-        private void LoadOrRefreshData(object commandParameter)
-        {
-            _libraryCollection = _libraryRepository.GetObjectCollection();
-            LibraryCollectionView = CollectionViewSource.GetDefaultView(LibraryCollection);
-
-            LibraryFilter libFilter = new LibraryFilter();
-            libFilter.AddFilter(
-                libModel => libModel.AuthorFirstName.Contains(AuthorFirstNameFilter));
-
-            libFilter.AddFilter(
-                libModel => libModel.AuthorLastName.Contains(AuthorLastNameFilter));
-
-            libFilter.AddFilter(
-                libModel => libModel.AuthorSurName.Contains(AuthorSurNameFilter));
-            
-            libFilter.AddFilter(
-                libModel => string.IsNullOrEmpty(BookYearFilter) || libModel.BookYear.ToString().Equals(BookYearFilter));
-
-            LibraryCollectionView.Filter = libFilter.Filter;
-            OnPropertyChanged("LibraryCollectionView");
-
-            MessageBox.Show("Data has been loaded.");
-        }
-
-
         public ObservableCollection<LibraryModel> LibraryCollection
         {
             get { return _libraryCollection; }
@@ -169,7 +287,37 @@ namespace LibraryWPF.ViewModel
             set { _libraryCollectionView = value; }
         }
 
+        public ICommand LoadFromDBCommand => new RelayCommand(LoadOrRefreshData);
+
+        private void LoadOrRefreshData(object commandParameter)
+        {
+            _libraryCollection = GetLibraryCollection();
+            LibraryCollectionView = CollectionViewSource.GetDefaultView(LibraryCollection);
+
+            LibraryFilter libFilter = new LibraryFilter();
+            libFilter.AddFilter(
+                libModel => libModel.AuthorLib.AuthorFirstName.Contains(AuthorFirstNameFilter));
+
+            libFilter.AddFilter(
+                libModel => libModel.AuthorLib.AuthorLastName.Contains(AuthorLastNameFilter));
+
+            libFilter.AddFilter(
+                libModel => libModel.AuthorLib.AuthorSurName.Contains(AuthorSurNameFilter));
+            
+            libFilter.AddFilter(
+                libModel => string.IsNullOrEmpty(BookYearFilter) || libModel.BookLib.BookYear.ToString().StartsWith(BookYearFilter));
+
+            LibraryCollectionView.Filter = libFilter.Filter;
+            OnPropertyChanged("LibraryCollectionView");
+
+            if(LibraryCollectionView == null || LibraryCollectionView?.Cast<LibraryModel>().ToList().Count == 0)
+                MessageBox.Show("There is no data in the Library.");
+            else
+                MessageBox.Show("Data has been loaded/refreshed.");
+        }
+
         private string _authorFirstNameFilter = string.Empty;
+        
         public string AuthorFirstNameFilter
         {
             get { return _authorFirstNameFilter; }
@@ -213,25 +361,61 @@ namespace LibraryWPF.ViewModel
             }
         }
 
+        //--------------------------sort collection
+
+        public ICommand SortLoadedCollection => new RelayCommand(SortCollection,
+                                                     (obj) => LoadedCollectionView != null &&
+                                                     LoadedCollectionView?.Cast<LibraryModel>().ToList().Count > 0);
+
+        public ICommand SortLibraryCollection => new RelayCommand(SortCollection,
+                                             (obj) => LibraryCollectionView != null &&
+                                             LibraryCollectionView?.Cast<LibraryModel>().ToList().Count > 0);
+
+        bool sortAscending = true;
+
+        void SortCollection(object commandParameter)
+        {
+            string[] commandString = ((string)commandParameter).Split(';');
+
+            string viewToSort = commandString[0];
+            string sortColumn = commandString[1];
+
+            (viewToSort == "LoadedCollectionView" ? LoadedCollectionView : LibraryCollectionView).SortDescriptions.Clear();
+ 
+            if (sortAscending)
+            {
+                (viewToSort == "LoadedCollectionView" ? LoadedCollectionView : LibraryCollectionView).SortDescriptions.Add
+                    (new SortDescription(sortColumn, ListSortDirection.Ascending));
+                sortAscending = false;
+            }
+            else
+            {
+                (viewToSort == "LoadedCollectionView" ? LoadedCollectionView : LibraryCollectionView).SortDescriptions.Add
+                    (new SortDescription(sortColumn, ListSortDirection.Descending));
+                sortAscending = true;
+            }
+        }
+
+
         //--------------------------export data
 
         public string XmlFormat { get; set; } = ".xml";
         public string CsvFormat { get; set; } = ".csv";
 
-        public ICommand ExportCommand => new RelayCommand(ExportDataFromDB, (obj) => LibraryCollectionView != null);
+        public ICommand ExportCommand => new RelayCommand(ExportDataFromDB, 
+                                                          (obj) => LibraryCollectionView != null &&
+                                                          LibraryCollectionView?.Cast<LibraryModel>().ToList().Count>0);
 
 
         public void ExportDataFromDB(object commandParameter)
         {
             try
             {
-                
                 string extension = commandParameter.ToString();
 
                 SaveFileDialog saveFileDialog = new SaveFileDialog();
 
                 saveFileDialog.Filter = (extension == ".csv") ? "Excel files (*.csv)|*.csv" : "XML files (*.xml)|*.xml";
-
 
                 if (saveFileDialog.ShowDialog() == true)
                 {
@@ -245,7 +429,6 @@ namespace LibraryWPF.ViewModel
                             libraryData += obj.ToString();
                             libraryData += '\n';
                         }
-
                     }
                     else
                     {
@@ -253,19 +436,19 @@ namespace LibraryWPF.ViewModel
                             "Library",
                             from obj in LibraryCollectionView.Cast<LibraryModel>().ToList()
                             select new XElement("Record",
-                                   new XAttribute("id", obj.Id),
-                                   new XElement("FirstName", obj.AuthorFirstName),
-                                   new XElement("LastName", obj.AuthorLastName),
-                                   new XElement("SurName", obj.AuthorSurName),
-                                   new XElement("Birthdate", obj.AuthorBirthDate),
-                                   new XElement("BookName", obj.BookName),
-                                   new XElement("BookYear", obj.BookYear)
+                                   new XAttribute("id", obj.AuthorLib.Id),
+                                   new XElement("FirstName", obj.AuthorLib.AuthorFirstName),
+                                   new XElement("LastName", obj.AuthorLib.AuthorLastName),
+                                   new XElement("SurName", obj.AuthorLib.AuthorSurName),
+                                   new XElement("Birthdate", obj.AuthorLib.AuthorBirthDate),
+                                   new XElement("BookName", obj.BookLib.BookName),
+                                   new XElement("BookYear", obj.BookLib.BookYear)
                         )).ToString();
-
-                        
                     }
 
-                    File.WriteAllText(saveFileDialog.FileName, libraryData, Encoding.UTF8);
+                    using FileStream fs = new FileStream(saveFileDialog.FileName, FileMode.Create);
+                    using StreamWriter writer = new StreamWriter(fs, Encoding.UTF8);
+                    writer.Write(libraryData);
 
                     MessageBox.Show($"Data uploaded to a file: {saveFileDialog.FileName}");
                 }

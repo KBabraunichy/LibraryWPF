@@ -6,8 +6,8 @@ namespace LibraryWPF.Repositories
 {
     public class LibraryContext : DbContext
     {
-        internal DbSet<LibraryModel> Library { get; set; }
-
+        internal DbSet<Author> Authors { get; set; }
+        internal DbSet<Book> Books { get; set; }
         public LibraryContext()
         {
             //Database.EnsureDeleted();
