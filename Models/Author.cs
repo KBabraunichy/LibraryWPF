@@ -6,16 +6,16 @@ namespace LibraryWPF.Models
     public class Author
     {
         public int Id { get; set; }
-        public string AuthorFirstName { get; set; }
-        public string AuthorLastName { get; set; }
-        public string AuthorSurName { get; set; }
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
+        public string SurName { get; set; }
 
         [Column(TypeName = "Date")]
-        public DateTime AuthorBirthDate { get; set; }
+        public DateTime BirthDate { get; set; }
 
         public override string ToString()
         {
-            return AuthorFirstName + ';' + AuthorLastName + ';' + AuthorSurName + ';' + AuthorBirthDate;
+            return FirstName + ';' + LastName + ';' + SurName + ';' + BirthDate;
         }
 
     }

@@ -6,9 +6,9 @@ namespace LibraryWPF.Models
     public class Book
     {
         public int Id { get; set; }
-        public string BookName { get; set; }
+        public string Name { get; set; }
 
-        public int BookYear { get; set; }
+        public int Year { get; set; }
 
         public int AuthorId { get; set; }
 
@@ -17,7 +17,7 @@ namespace LibraryWPF.Models
         
         public override string ToString()
         {
-            return BookName + ';' + BookYear;
+            return Name + ';' + Year;
         }
 
     }

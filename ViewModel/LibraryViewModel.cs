@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -28,43 +29,65 @@ namespace LibraryWPF.ViewModel
         {
             _authorRepository = new AuthorRepository();
             _bookRepository = new BookRepository();
-
+            LibraryCollectionViewRefresh();
         }
 
-        public ObservableCollection<LibraryModel> GetLibraryCollection() 
+        public ObservableCollection<BookCollectionItem> GetLibraryCollection() 
         {
             var authorCollection = _authorRepository.GetObjectCollection();
             var bookCollection = _bookRepository.GetObjectCollection();
 
-            return  new ObservableCollection<LibraryModel>(
+            return  new ObservableCollection<BookCollectionItem>(
                         from authors in authorCollection
                         join books in bookCollection on authors.Id equals books.AuthorId
-                        select new LibraryModel
+                        select new BookCollectionItem
                         {
-                            AuthorLib = new Author
+                            Author = new Author
                             {
                                 Id = authors.Id,
-                                AuthorFirstName = authors.AuthorFirstName,
-                                AuthorLastName = authors.AuthorLastName,
-                                AuthorSurName = authors.AuthorSurName,
-                                AuthorBirthDate = authors.AuthorBirthDate
+                                FirstName = authors.FirstName,
+                                LastName = authors.LastName,
+                                SurName = authors.SurName,
+                                BirthDate = authors.BirthDate
                             },
-                            BookLib = new Book
+                            Book = new Book
                             {
-                                BookName = books.BookName,
-                                BookYear = books.BookYear,
-                                AuthorId = authors.Id
+                                Name = books.Name,
+                                Year = books.Year,
+                                AuthorId = books.AuthorId
                             }
                         }
                     );
             
         }
 
+        public void LibraryCollectionViewRefresh()
+        {
+            _libraryCollection = GetLibraryCollection();
+            LibraryCollectionView = CollectionViewSource.GetDefaultView(LibraryCollection);
 
+            LibraryFilter libFilter = new LibraryFilter();
+            libFilter.AddFilter(
+                libModel => libModel.Author.FirstName.ToUpper().StartsWith(AuthorFirstNameFilter.ToUpper()));
+
+            libFilter.AddFilter(
+                libModel => libModel.Author.LastName.ToUpper().StartsWith(AuthorLastNameFilter.ToUpper()));
+
+            libFilter.AddFilter(
+                libModel => libModel.Author.SurName.ToUpper().StartsWith(AuthorSurNameFilter.ToUpper()));
+
+            libFilter.AddFilter(
+                libModel => string.IsNullOrEmpty(BookYearFilter) || libModel.Book.Year.ToString().StartsWith(BookYearFilter));
+
+            LibraryCollectionView.Filter = libFilter.Filter;
+
+            OnPropertyChanged("LibraryCollectionView");
+
+        }
         //--------------------------open file/import data
 
-        private ObservableCollection<LibraryModel> _loadedCollection;
-        public ObservableCollection<LibraryModel> LoadedCollection
+        private ObservableCollection<BookCollectionItem> _loadedCollection;
+        public ObservableCollection<BookCollectionItem> LoadedCollection
         {
             get { return _loadedCollection; }
             set { _loadedCollection = value; }
@@ -82,22 +105,25 @@ namespace LibraryWPF.ViewModel
 
         private void ReadFile(object commandParameter)
         {
-            LoadedCollection = new ObservableCollection<LibraryModel>();
+            LoadedCollection = new ObservableCollection<BookCollectionItem>();
 
             OpenFileDialog openFileDialog = new OpenFileDialog();
             openFileDialog.Filter = "CSV files (*.csv)|*.csv";
+
+            string filePath = string.Empty;
 
             try
             {
                 if (openFileDialog.ShowDialog() == true)
                 {
-                    List<Tuple<string, string>> listErrors = new List<Tuple<string, string>>();
+                    List<IncorrectLines> listErrors = new List<IncorrectLines>();
 
                     List<string> uniqueLines = new List<string>();
 
                     //remove duplicates in file
                     using (StreamReader streamReader = File.OpenText(openFileDialog.FileName))
                     {
+                        filePath = openFileDialog.FileName;
                         string line;
                         while ((line = streamReader.ReadLine()) != null)
                             if (!uniqueLines.Contains(line))
@@ -111,24 +137,35 @@ namespace LibraryWPF.ViewModel
                         {
                             string[] data = line.Split(';');
 
-                            DateTime authorBirthDate = DateTime.Parse(data[3]).Date;
+                            DateTime authorBirthDate;
+
+                            if(!DateTime.TryParse(data[3], out authorBirthDate))
+                            {
+                                var formatStrings = new string[] { "MM/dd/yyyy", "yyyy-MM-dd", "dd/MM/yyyy" };
+                                if (!DateTime.TryParseExact(data[3], formatStrings, CultureInfo.InvariantCulture, DateTimeStyles.None, out authorBirthDate))
+                                {
+                                    listErrors.Add(new IncorrectLines { Line = line, Error = "Incorrect date format for parsing." });
+                                    continue;
+                                }
+                            }
+
 
                             if (data.Length != 6)
                             {
-                                listErrors.Add(new Tuple<string, string>(line, "Incorrect line format for parsing."));
+                                listErrors.Add(new IncorrectLines{ Line = line, Error = "Incorrect line format for parsing." });
                                 continue;
                             }
 
                             if (!data[0].All(Char.IsLetter) || !data[1].All(Char.IsLetter) || !data[2].All(Char.IsLetter) ||
                                 string.IsNullOrEmpty(data[0]) || string.IsNullOrEmpty(data[1]))
                             {
-                                listErrors.Add(new Tuple<string, string>(line, "Incorrect string format for parsing first name, last name or surname."));
+                                listErrors.Add(new IncorrectLines { Line = line, Error = "Incorrect string format for parsing first name, last name or surname." });
                                 continue;
                             }
 
                             if (string.IsNullOrEmpty(data[4]))
                             {
-                                listErrors.Add(new Tuple<string, string>(line, "Book name can't be empty."));
+                                listErrors.Add(new IncorrectLines { Line = line, Error = "Book name can't be empty." });
                                 continue;
                             }
 
@@ -137,69 +174,103 @@ namespace LibraryWPF.ViewModel
                             {
                                 if (!int.TryParse(data[5], out bookYear) || bookYear > DateTime.Now.Date.Year || bookYear < 1)
                                 {
-                                    listErrors.Add(new Tuple<string, string>(line, "Incorrect book year."));
+                                    listErrors.Add(new IncorrectLines { Line = line, Error = "Incorrect book year." });
                                     continue;
                                 }
                             }
 
-                            var checkAuthorInDB = libColection.Where(a => a.AuthorLib.AuthorFirstName == data[0].Trim() && a.AuthorLib.AuthorLastName == data[1].Trim() &&
-                                                                          a.AuthorLib.AuthorSurName == data[2].Trim() && a.AuthorLib.AuthorBirthDate == authorBirthDate)
-                                                              .Select(aid => aid.AuthorLib.Id)
-                                                              .FirstOrDefault();
+                            authorBirthDate = authorBirthDate.Date;
 
-                            if (checkAuthorInDB == 0)
+                            var checkAuthorIdInDB = libColection.Where(a => a.Author.FirstName == data[0].Trim() && a.Author.LastName == data[1].Trim() &&
+                                                                          a.Author.SurName == data[2].Trim() && a.Author.BirthDate == authorBirthDate)
+                                                                .Select(aid => aid.Author.Id)
+                                                                .FirstOrDefault();
+
+                            var checkAuthorInLoadedCollection = LoadedCollection.Where(a => a.Author.FirstName == data[0].Trim() && a.Author.LastName == data[1].Trim() &&
+                                                                                       a.Author.SurName == data[2].Trim() && a.Author.BirthDate == authorBirthDate)
+                                                                                .Select(aid => aid.Author)
+                                                                                .FirstOrDefault();
+
+                            if (checkAuthorIdInDB == 0 && checkAuthorInLoadedCollection is null)
                             {
+                                //No author in db and no author in collection inside the file data
+
                                 Author newAuthor = new Author
                                 {
-                                    AuthorFirstName = data[0].Trim(),
-                                    AuthorLastName = data[1].Trim(),
-                                    AuthorSurName = data[2].Trim(),
-                                    AuthorBirthDate = authorBirthDate,
+                                    FirstName = data[0].Trim(),
+                                    LastName = data[1].Trim(),
+                                    SurName = data[2].Trim(),
+                                    BirthDate = authorBirthDate,
                                 };
 
                                 Book newBook = new Book
                                 {
-                                    BookName = data[4],
-                                    BookYear = bookYear,
+                                    Name = data[4].Trim(),
+                                    Year = bookYear,
                                     Author = newAuthor
                                 };
 
                                 _authorRepository.Insert(newAuthor);
                                 _bookRepository.Insert(newBook);
 
-                                LoadedCollection.Add(new LibraryModel
+                                LoadedCollection.Add(new BookCollectionItem
                                 {
-                                    AuthorLib = newAuthor,
-                                    BookLib = newBook
+                                    Author = newAuthor,
+                                    Book = newBook
                                 });
                             }
-                            else
+                            else if (checkAuthorIdInDB == 0 && checkAuthorInLoadedCollection is not null)
                             {
-                                var checkBookInDB = libColection.Where(b => b.BookLib.BookName == data[4] &&
-                                                                       b.BookLib.BookYear == bookYear &&
-                                                                       b.BookLib.AuthorId == checkAuthorInDB);
+                                //No Author in db but there is author in data from file
 
+                                Book newBookForExistingAuthorInLoadedCollection = new Book
+                                {
+                                    Name = data[4].Trim(),
+                                    Year = bookYear,
+                                    Author = checkAuthorInLoadedCollection
+                                };
+
+                                _bookRepository.Insert(newBookForExistingAuthorInLoadedCollection);
+
+                                LoadedCollection.Add(new BookCollectionItem
+                                {
+                                    Author = checkAuthorInLoadedCollection,
+
+                                    Book = newBookForExistingAuthorInLoadedCollection
+                                });
+                            }
+                            else 
+                            { 
+                                var checkBookInDB = libColection.Where(b => b.Book.Name == data[4].Trim() &&
+                                                                       b.Book.Year == bookYear &&
+                                                                       b.Book.AuthorId == checkAuthorIdInDB);
+                                
                                 if (!checkBookInDB.Any())
                                 {
-                                    Book newBook = new Book
+                                    // There is author in db, but there is no book for author in db with data provided
+
+                                    Book newBookForExistingAuthorInDb = new Book
                                     {
-                                        BookName = data[4],
-                                        BookYear = bookYear,
-                                        AuthorId = checkAuthorInDB
+                                        Name = data[4].Trim(),
+                                        Year = bookYear,
+                                        AuthorId = checkAuthorIdInDB
                                     };
 
-                                    _bookRepository.Insert(newBook);
+                                    _bookRepository.Insert(newBookForExistingAuthorInDb);
 
-                                    LoadedCollection.Add(new LibraryModel
+                                    LoadedCollection.Add(new BookCollectionItem
                                     {
-                                        AuthorLib = libColection.Where(a => a.AuthorLib.Id == checkAuthorInDB)
-                                                                .Select(a => a.AuthorLib)
+                                        Author = libColection.Where(a => a.Author.Id == checkAuthorIdInDB)
+                                                                .Select(a => a.Author)
                                                                 .First(),
-                                        BookLib = newBook
+
+                                        Book = newBookForExistingAuthorInDb
                                     });
                                 }
                                 else
                                 {
+                                    //There is author and book in db
+
                                     continue;
                                 }
                             }
@@ -207,7 +278,7 @@ namespace LibraryWPF.ViewModel
                         }
                         catch (Exception e)
                         {
-                            listErrors.Add(new Tuple<string, string>(line, e.Message));
+                            listErrors.Add(new IncorrectLines { Line = line, Error = e.Message });
                         }
                     }
 
@@ -219,7 +290,7 @@ namespace LibraryWPF.ViewModel
                     }
                     else if(listErrors.Count > 0)
                     {
-                        FailedRowsFromFile(listErrors);
+                        FailedRowsFromFile(listErrors, filePath);
                     }    
                     else
                     {
@@ -228,52 +299,60 @@ namespace LibraryWPF.ViewModel
 
                     LoadedCollectionView = CollectionViewSource.GetDefaultView(LoadedCollection);
                     OnPropertyChanged("LoadedCollectionView");
+
+                    LibraryCollectionViewRefresh();
+
                 }
             }
             catch (Exception e)
             {
                 MessageBox.Show(e.Message);
-                MessageBox.Show(e.InnerException?.Message);
+                if(e.InnerException is not null)
+                    MessageBox.Show(e.InnerException.Message);
             }
         }
 
-        private void FailedRowsFromFile(List<Tuple<string, string>> listErrors)
+        private void FailedRowsFromFile(List<IncorrectLines> listErrors, string filePath)
         {
             string badRowsCsv = string.Empty;
             string badRowsInfo = string.Empty;
 
-            SaveFileDialog saveFileDialog = new SaveFileDialog();
-            saveFileDialog.Filter = "Excel files (*.csv)|*.csv";
-
             int i = 1;
-
-            badRowsInfo += "There are lines with errors in file. You can save these lines to file after closing this window.\n\n";
             
-            foreach (var tuple in listErrors)
+            foreach (var incorrectLine in listErrors)
             {
-                badRowsCsv += tuple.Item1 + "\n";
+                badRowsCsv += incorrectLine.Line + "\n";
                 
-                badRowsInfo += $"Line {i}:\n" + tuple.Item1 + "\nError: " + tuple.Item2 + "\n";
+                badRowsInfo += $"Line {i}:\n" + incorrectLine.Line + "\nError: " + incorrectLine.Error + "\n";
                 
                 i++;
             }
 
-            MessageBox.Show(badRowsInfo);
-
-            if (saveFileDialog.ShowDialog() == true)
+            Dictionary<string, string> files = new Dictionary<string, string>
             {
-                using FileStream fs = new FileStream(saveFileDialog.FileName, FileMode.Create);
-                using StreamWriter writer = new StreamWriter(fs, Encoding.UTF8);
-                writer.Write(badRowsCsv);
-            }
-        }
+                { filePath.Substring(0, filePath.Length - 4) + "_badrows.csv", badRowsCsv },
+                { filePath.Substring(0, filePath.Length - 4) + "_badrowsinfo.txt", badRowsInfo}
+            };
 
+            string message = "There are lines with errors in file. Check the files below for more info:\n";
+
+            foreach (var file in files)
+            {
+                using FileStream fs = new FileStream(file.Key, FileMode.Create);
+                using StreamWriter writer = new StreamWriter(fs, Encoding.UTF8);
+                writer.Write(file.Value);
+
+                message += "\n" + file.Key;
+            }
+
+            MessageBox.Show(message);
+        }
 
         //--------------------------filter for export data
 
-        private ObservableCollection<LibraryModel> _libraryCollection;
+        private ObservableCollection<BookCollectionItem> _libraryCollection;
         
-        public ObservableCollection<LibraryModel> LibraryCollection
+        public ObservableCollection<BookCollectionItem> LibraryCollection
         {
             get { return _libraryCollection; }
             set { _libraryCollection = value; }
@@ -291,29 +370,20 @@ namespace LibraryWPF.ViewModel
 
         private void LoadOrRefreshData(object commandParameter)
         {
-            _libraryCollection = GetLibraryCollection();
-            LibraryCollectionView = CollectionViewSource.GetDefaultView(LibraryCollection);
 
-            LibraryFilter libFilter = new LibraryFilter();
-            libFilter.AddFilter(
-                libModel => libModel.AuthorLib.AuthorFirstName.Contains(AuthorFirstNameFilter));
+            LibraryCollectionViewRefresh();
 
-            libFilter.AddFilter(
-                libModel => libModel.AuthorLib.AuthorLastName.Contains(AuthorLastNameFilter));
+            AuthorFirstNameFilter = string.Empty;
+            OnPropertyChanged("AuthorFirstNameFilter");
+            AuthorLastNameFilter = string.Empty;
+            OnPropertyChanged("AuthorLastNameFilter");
+            AuthorSurNameFilter = string.Empty;
+            OnPropertyChanged("AuthorSurNameFilter");
+            BookYearFilter = string.Empty;
+            OnPropertyChanged("BookYearFilter");
 
-            libFilter.AddFilter(
-                libModel => libModel.AuthorLib.AuthorSurName.Contains(AuthorSurNameFilter));
-            
-            libFilter.AddFilter(
-                libModel => string.IsNullOrEmpty(BookYearFilter) || libModel.BookLib.BookYear.ToString().StartsWith(BookYearFilter));
-
-            LibraryCollectionView.Filter = libFilter.Filter;
-            OnPropertyChanged("LibraryCollectionView");
-
-            if(LibraryCollectionView == null || LibraryCollectionView?.Cast<LibraryModel>().ToList().Count == 0)
+            if(LibraryCollectionView == null || LibraryCollectionView?.Cast<BookCollectionItem>().ToList().Count == 0)
                 MessageBox.Show("There is no data in the Library.");
-            else
-                MessageBox.Show("Data has been loaded/refreshed.");
         }
 
         private string _authorFirstNameFilter = string.Empty;
@@ -365,11 +435,11 @@ namespace LibraryWPF.ViewModel
 
         public ICommand SortLoadedCollection => new RelayCommand(SortCollection,
                                                      (obj) => LoadedCollectionView != null &&
-                                                     LoadedCollectionView?.Cast<LibraryModel>().ToList().Count > 0);
+                                                     LoadedCollectionView?.Cast<BookCollectionItem>().ToList().Count > 0);
 
         public ICommand SortLibraryCollection => new RelayCommand(SortCollection,
                                              (obj) => LibraryCollectionView != null &&
-                                             LibraryCollectionView?.Cast<LibraryModel>().ToList().Count > 0);
+                                             LibraryCollectionView?.Cast<BookCollectionItem>().ToList().Count > 0);
 
         bool sortAscending = true;
 
@@ -404,7 +474,7 @@ namespace LibraryWPF.ViewModel
 
         public ICommand ExportCommand => new RelayCommand(ExportDataFromDB, 
                                                           (obj) => LibraryCollectionView != null &&
-                                                          LibraryCollectionView?.Cast<LibraryModel>().ToList().Count>0);
+                                                          LibraryCollectionView?.Cast<BookCollectionItem>().ToList().Count>0);
 
 
         public void ExportDataFromDB(object commandParameter)
@@ -424,7 +494,7 @@ namespace LibraryWPF.ViewModel
                     if (extension == ".csv")
                     {
 
-                        foreach (LibraryModel obj in LibraryCollectionView)
+                        foreach (BookCollectionItem obj in LibraryCollectionView)
                         {
                             libraryData += obj.ToString();
                             libraryData += '\n';
@@ -435,15 +505,15 @@ namespace LibraryWPF.ViewModel
                         int id = 1;
                         libraryData = new XElement(
                             "Library",
-                            from obj in LibraryCollectionView.Cast<LibraryModel>().ToList()
+                            from obj in LibraryCollectionView.Cast<BookCollectionItem>().ToList()
                             select new XElement("Record",
                                    new XAttribute("id", id++),
-                                   new XElement("FirstName", obj.AuthorLib.AuthorFirstName),
-                                   new XElement("LastName", obj.AuthorLib.AuthorLastName),
-                                   new XElement("SurName", obj.AuthorLib.AuthorSurName),
-                                   new XElement("Birthdate", obj.AuthorLib.AuthorBirthDate),
-                                   new XElement("BookName", obj.BookLib.BookName),
-                                   new XElement("BookYear", obj.BookLib.BookYear)
+                                   new XElement("FirstName", obj.Author.FirstName),
+                                   new XElement("LastName", obj.Author.LastName),
+                                   new XElement("SurName", obj.Author.SurName),
+                                   new XElement("Birthdate", obj.Author.BirthDate),
+                                   new XElement("BookName", obj.Book.Name),
+                                   new XElement("BookYear", obj.Book.Year)
                         )).ToString();
                     }
 

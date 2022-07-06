@@ -1,5 +1,6 @@
 ﻿using LibraryWPF.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System.Configuration;
 
 namespace LibraryWPF.Repositories
@@ -11,14 +12,18 @@ namespace LibraryWPF.Repositories
         public LibraryContext()
         {
             //Database.EnsureDeleted();
-            Database.EnsureCreated();
+            //Database.EnsureCreated();
+            Database.Migrate();
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            string connection = ConfigurationManager.AppSettings["connectionString"];
-            optionsBuilder.UseSqlServer(connection);
-            //optionsBuilder.LogTo(System.Console.WriteLine);
+            var builder = new ConfigurationBuilder();
+            builder.AddJsonFile("appsettings.json");
+            var config = builder.Build();
+            string connectionString = config.GetConnectionString("DefaultConnection");
+
+            optionsBuilder.UseSqlServer(connectionString);
         }
     }
 }

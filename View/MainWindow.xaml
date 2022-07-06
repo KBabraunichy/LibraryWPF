@@ -53,29 +53,29 @@
 
                 <ListView Grid.Row="1" ItemsSource="{Binding LoadedCollectionView}" >
                     <ListView.View>
-                        <GridView>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=AuthorLib.AuthorFirstName}">
-                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;AuthorLib.AuthorFirstName" 
+                        <GridView >
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Author.FirstName}">
+                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;Author.rFirstName" 
                                                       Content="First name"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=AuthorLib.AuthorLastName}">
-                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;AuthorLib.AuthorLastName" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Author.LastName}">
+                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;Author.LastName" 
                                                       Content="Last name"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=AuthorLib.AuthorSurName}">
-                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;AuthorLib.AuthorSurName" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Author.SurName}">
+                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;Author.SurName" 
                                                       Content="Surname"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=AuthorLib.AuthorBirthDate, StringFormat='{}{0:dd.MM.yyyy}'}">
-                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;AuthorLib.AuthorBirthDate" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Author.BirthDate, StringFormat='{}{0:dd.MM.yyyy}'}">
+                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;Author.BirthDate" 
                                                       Content="Birthdate"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=BookLib.BookName}">
-                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;BookLib.BookName" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Book.Name}">
+                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;Book.Name" 
                                                       Content="Book Name"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=BookLib.BookYear}">
-                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;BookLib.BookYear" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Book.Year}">
+                                <GridViewColumnHeader Command="{Binding SortLoadedCollection}" CommandParameter="LoadedCollectionView;Book.kYear" 
                                                       Content="Book Year"/>
                             </GridViewColumn>
                         </GridView>
@@ -105,7 +105,7 @@
                 <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Left" Margin="5">
                     <Button  Height="20" Width="80" 
                         Command ="{Binding LoadFromDBCommand}"
-                        Content="Load/Refresh data" FontSize="9" />
+                        Content="Refresh data" FontSize="9" />
                     <TextBlock Text="First Name" VerticalAlignment="Center" Margin="5"/>
                     <TextBox Text="{Binding AuthorFirstNameFilter,UpdateSourceTrigger=PropertyChanged}" Width="70" Height="20"/>
                     <TextBlock Text="Last Name" VerticalAlignment="Center" Margin="10,5,5,5"/>
@@ -119,28 +119,28 @@
                 <ListView Grid.Row="1" ItemsSource="{Binding LibraryCollectionView}" >
                     <ListView.View>
                         <GridView>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=AuthorLib.AuthorFirstName}">
-                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;AuthorLib.AuthorFirstName" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Author.FirstName}">
+                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;Author.FirstName" 
                                                       Content="First name"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=AuthorLib.AuthorLastName}">
-                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;AuthorLib.AuthorLastName" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Author.LastName}">
+                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;Author.LastName" 
                                                       Content="Last name"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=AuthorLib.AuthorSurName}">
-                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;AuthorLib.AuthorSurName" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Author.SurName}">
+                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;Author.SurName" 
                                                       Content="Surname"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=AuthorLib.AuthorBirthDate, StringFormat='{}{0:dd.MM.yyyy}'}">
-                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;AuthorLib.AuthorBirthDate" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Author.BirthDate, StringFormat='{}{0:dd.MM.yyyy}'}">
+                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;Author.BirthDate" 
                                                       Content="Birthdate"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=BookLib.BookName}">
-                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;BookLib.BookName" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Book.Name}">
+                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;Book.Name" 
                                                       Content="Book Name"/>
                             </GridViewColumn>
-                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding Path=BookLib.BookYear}">
-                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;BookLib.BookYear" 
+                            <GridViewColumn Width="Auto" DisplayMemberBinding="{Binding Path=Book.Year}">
+                                <GridViewColumnHeader Command="{Binding SortLibraryCollection}" CommandParameter="LibraryCollectionView;Book.Year" 
                                                       Content="Book Year"/>
                             </GridViewColumn>
                         </GridView>
